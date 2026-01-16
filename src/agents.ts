@@ -78,6 +78,15 @@ export const agents: Record<AgentType, AgentConfig> = {
       return existsSync(join(home, '.config/goose'));
     },
   },
+  'gemini-cli': {
+    name: 'gemini-cli',
+    displayName: 'Gemini CLI',
+    skillsDir: '.gemini/skills',
+    globalSkillsDir: join(home, '.gemini/skills'),
+    detectInstalled: async () => {
+      return existsSync(join(home, '.gemini'));
+    },
+  },
   antigravity: {
     name: 'antigravity',
     displayName: 'Antigravity',
