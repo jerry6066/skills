@@ -20,7 +20,7 @@ import { detectInstalledAgents, agents } from './agents.js';
 import { track, setVersion } from './telemetry.js';
 import { fetchMintlifySkill } from './mintlify.js';
 import { findProvider } from './providers/index.js';
-import { addSkillToLock, computeContentHash } from './skill-lock.js';
+import { addSkillToLock, fetchSkillFolderHash } from './skill-lock.js';
 import type { Skill, AgentType, MintlifySkill, RemoteSkill } from './types.js';
 import packageJson from '../package.json' with { type: 'json' };
 
@@ -400,15 +400,18 @@ async function handleRemoteSkill(
   // Add to skill lock file for update tracking (only for global installs)
   if (successful.length > 0 && installGlobally) {
     try {
-      // For remote skills, we only have the SKILL.md content
-      // The server will compute the full folder hash via GitHub Trees API
-      const contentHash = computeContentHash(remoteSkill.content);
+      // Try to fetch the folder hash from GitHub Trees API
+      let skillFolderHash = '';
+      if (remoteSkill.providerId === 'github') {
+        const hash = await fetchSkillFolderHash(remoteSkill.sourceIdentifier, url);
+        if (hash) skillFolderHash = hash;
+      }
+
       await addSkillToLock(remoteSkill.installName, {
         source: remoteSkill.sourceIdentifier,
         sourceType: remoteSkill.providerId,
         sourceUrl: url,
-        contentHash,
-        // skillFolderHash will be populated by server during update check
+        skillFolderHash,
       });
     } catch {
       // Don't fail installation if lock file update fails
@@ -739,14 +742,13 @@ async function handleDirectUrlSkillLegacy(
   // Add to skill lock file for update tracking (only for global installs)
   if (successful.length > 0 && installGlobally) {
     try {
-      // For Mintlify skills, we only have the SKILL.md content
-      const contentHash = computeContentHash(mintlifySkill.content);
+      // skillFolderHash will be populated by telemetry server
+      // Mintlify skills are single-file, so folder hash = content hash on server
       await addSkillToLock(mintlifySkill.mintlifySite, {
         source: `mintlify/${mintlifySkill.mintlifySite}`,
         sourceType: 'mintlify',
         sourceUrl: url,
-        contentHash,
-        // skillFolderHash will be populated by server during update check
+        skillFolderHash: '', // Populated by server
       });
     } catch {
       // Don't fail installation if lock file update fails
@@ -1202,15 +1204,20 @@ async function main(source: string, options: Options) {
         const skillDisplayName = getSkillDisplayName(skill);
         if (successfulSkillNames.has(skillDisplayName)) {
           try {
-            // Store contentHash for backwards compat
-            // Server will fetch skillFolderHash via GitHub Trees API
+            // Fetch the folder hash from GitHub Trees API
+            let skillFolderHash = '';
+            const skillPathValue = skillFiles[skill.name];
+            if (parsed.type === 'github' && skillPathValue) {
+              const hash = await fetchSkillFolderHash(normalizedSource, skillPathValue);
+              if (hash) skillFolderHash = hash;
+            }
+
             await addSkillToLock(skill.name, {
               source: normalizedSource,
               sourceType: parsed.type,
               sourceUrl: parsed.url,
-              skillPath: skillFiles[skill.name],
-              contentHash: skill.rawContent ? computeContentHash(skill.rawContent) : '',
-              // skillFolderHash is populated by server via GitHub Trees API
+              skillPath: skillPathValue,
+              skillFolderHash,
             });
           } catch {
             // Don't fail installation if lock file update fails
