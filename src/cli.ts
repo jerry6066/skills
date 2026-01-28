@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { runAdd, parseAddOptions, initTelemetry } from './add.ts';
 import { runFind } from './find.ts';
 import { runList } from './list.ts';
+import { removeCommand, parseRemoveOptions } from './remove.ts';
 import { track } from './telemetry.ts';
 
 export function formatSkippedMessage(skippedSkills: string[]): string | null {
@@ -88,6 +89,9 @@ function showBanner(): void {
     `  ${DIM}$${RESET} ${TEXT}npx skills update${RESET}          ${DIM}Update all skills${RESET}`
   );
   console.log(
+    `  ${DIM}$${RESET} ${TEXT}npx skills remove${RESET}         ${DIM}Remove installed skills${RESET}`
+  );
+  console.log(
     `  ${DIM}$${RESET} ${TEXT}npx skills init ${DIM}[name]${RESET}     ${DIM}Create a new skill${RESET}`
   );
   console.log();
@@ -105,6 +109,7 @@ ${BOLD}Commands:${RESET}
   add <package>     Add a skill package
                     e.g. vercel-labs/agent-skills
                          https://github.com/vercel-labs/agent-skills
+  remove [skills]   Remove installed skills
   list, ls          List installed skills
   find [query]      Search for skills interactively
   init [name]       Initialize a skill (creates <name>/SKILL.md or ./SKILL.md)
@@ -120,6 +125,12 @@ ${BOLD}Add Options:${RESET}
   -y, --yes              Skip confirmation prompts
   --all                  Install all skills to all agents without any prompts
 
+${BOLD}Remove Options:${RESET}
+  -g, --global           Remove from global scope
+  -a, --agent <agents>   Remove from specific agents
+  -y, --yes              Skip confirmation prompts
+  --all                  Remove all installed skills
+  
 ${BOLD}List Options:${RESET}
   -g, --global           List global skills (default: project)
   -a, --agent <agents>   Filter by specific agents
@@ -134,6 +145,9 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} skills add vercel-labs/agent-skills -g
   ${DIM}$${RESET} skills add vercel-labs/agent-skills --agent claude-code cursor
   ${DIM}$${RESET} skills add vercel-labs/agent-skills --skill pr-review commit
+  ${DIM}$${RESET} skills remove                   ${DIM}# interactive remove${RESET}
+  ${DIM}$${RESET} skills remove web-design        ${DIM}# remove by name${RESET}
+  ${DIM}$${RESET} skills rm --global frontend-design
   ${DIM}$${RESET} skills list                     ${DIM}# list all installed skills${RESET}
   ${DIM}$${RESET} skills ls -g                    ${DIM}# list global skills only${RESET}
   ${DIM}$${RESET} skills ls -a claude-code        ${DIM}# filter by agent${RESET}
@@ -142,6 +156,35 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} skills init my-skill
   ${DIM}$${RESET} skills check
   ${DIM}$${RESET} skills update
+
+Discover more skills at ${TEXT}https://skills.sh/${RESET}
+`);
+}
+
+function showRemoveHelp(): void {
+  console.log(`
+${BOLD}Usage:${RESET} skills remove [skills...] [options]
+
+${BOLD}Description:${RESET}
+  Remove installed skills from agents. If no skill names are provided,
+  an interactive selection menu will be shown.
+
+${BOLD}Arguments:${RESET}
+  skills            Optional skill names to remove (space-separated)
+
+${BOLD}Options:${RESET}
+  -g, --global       Remove from global scope (~/) instead of project scope
+  -a, --agent        Remove from specific agents only
+  -y, --yes          Skip confirmation prompts
+  --all              Remove all installed skills
+
+${BOLD}Examples:${RESET}
+  ${DIM}$${RESET} skills remove                           ${DIM}# interactive selection${RESET}
+  ${DIM}$${RESET} skills remove my-skill                   ${DIM}# remove specific skill${RESET}
+  ${DIM}$${RESET} skills remove skill1 skill2 -y           ${DIM}# remove multiple skills${RESET}
+  ${DIM}$${RESET} skills remove --global my-skill          ${DIM}# remove from global scope${RESET}
+  ${DIM}$${RESET} skills rm --agent claude-code my-skill   ${DIM}# remove from specific agent${RESET}
+  ${DIM}$${RESET} skills remove --all -y                   ${DIM}# remove all skills${RESET}
 
 Discover more skills at ${TEXT}https://skills.sh/${RESET}
 `);
@@ -735,6 +778,17 @@ async function main(): Promise<void> {
       await runAdd(source, options);
       break;
     }
+    case 'remove':
+    case 'rm':
+    case 'r':
+      // Check for --help or -h flag
+      if (restArgs.includes('--help') || restArgs.includes('-h')) {
+        showRemoveHelp();
+        break;
+      }
+      const { skills, options: removeOptions } = parseRemoveOptions(restArgs);
+      await removeCommand(skills, removeOptions);
+      break;
     case 'list':
     case 'ls':
       await runList(restArgs);
